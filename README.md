@@ -1,13 +1,46 @@
 # Claude Session Switcher
 
-A local web app for Claude Code sessions on Windows. Lists every session on the
-machine, filters by archived state, renames them, and moves them between
-subscriptions so you can continue the same conversation under a different account.
+**Move a Claude Code conversation from one subscription to another, on the same
+machine, and pick it up exactly where you left off.**
+
+If you run Claude Code under more than one account — a personal plan and a work
+plan, say — each lives in its own `CLAUDE_CONFIG_DIR` with its own sessions. The
+CLI gives you no way to see across them: `claude --resume` lists only the current
+directory, under the current account. So a conversation started on the wrong plan
+is effectively stranded.
+
+This is a small local web app that fixes that. It shows every session on the
+machine in one table — across every account — lets you filter by archived state,
+rename them, and hand a session to a different subscription so you can carry on
+under that account's credentials.
+
+![Node](https://img.shields.io/badge/node-%E2%89%A518-informational)
+![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
+![Platform](https://img.shields.io/badge/platform-Windows-blue)
+![License](https://img.shields.io/badge/license-MIT-lightgrey)
+
+### What it does
+
+- **One list, every account.** Sessions from every config dir, joined with the
+  desktop app's own registry so you get the real titles and archived state.
+- **Filter** by subscription, archived / active / unknown, running / idle, and
+  free-text across title, prompt, folder, branch, and session id.
+- **Move or copy** a session between subscriptions, with guards against the ways
+  that can quietly destroy a transcript.
+- **Rename** a session using the same mechanism Claude Code itself uses.
+- **Stops itself** after 5 minutes idle, so it never becomes a stray dev server.
 
 Zero dependencies — no `npm install`, nothing to build, nothing phones home. It
 binds to `127.0.0.1` only, because it exposes your session transcripts.
 
-![Node](https://img.shields.io/badge/node-%E2%89%A518-informational)
+### Why it isn't just a file copy
+
+It mostly is — and that is the interesting part. A transcript carries **no
+account identity**, so relocating the `.jsonl` is genuinely all it takes. But
+finding the right file, knowing whether a session is archived, showing its
+current name, and not corrupting a live one each require reconciling two separate
+stores that Claude Code keeps in different places and links only loosely. That
+reconciliation is what this repo is.
 
 ## Run
 
