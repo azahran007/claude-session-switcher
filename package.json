@@ -1,0 +1,13 @@
+{
+  "name": "claude-session-switcher",
+  "version": "1.0.0",
+  "description": "List, rename, and move Claude Code sessions between subscriptions on one machine.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": { "node": ">=18" },
+  "license": "MIT",
+  "private": false,
+  "keywords": ["claude", "claude-code", "sessions", "cli"]
+}

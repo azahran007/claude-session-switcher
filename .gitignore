@@ -1,0 +1,7 @@
+node_modules/
+npm-debug.log*
+*.local.md
+.claude/
+.DS_Store
+Thumbs.db
+*.log

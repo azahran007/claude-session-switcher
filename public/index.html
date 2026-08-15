@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Claude Session Manager</title>
+<style>
+  :root {
+    --bg:#f7f7f5; --panel:#fff; --ink:#1a1a18; --muted:#6b6b66; --line:#e3e3de;
+    --accent:#c15f3c; --accent-ink:#fff; --warn-bg:#fdf3e7; --warn-line:#e8c9a0; --warn-ink:#7a4a12;
+    --danger:#b3261e; --ok:#2e7d32; --chip:#efefec; --shadow:0 1px 2px rgba(0,0,0,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#191917; --panel:#232320; --ink:#eeeee9; --muted:#a3a39b; --line:#37372f;
+      --accent:#d97757; --accent-ink:#1a1a18; --warn-bg:#2e2517; --warn-line:#5c4a2a; --warn-ink:#e8c9a0;
+      --danger:#f2857d; --ok:#7bc47f; --chip:#2e2e2a; --shadow:none;
+    }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+  header { padding:20px 24px 0; }
+  h1 { font-size:19px; margin:0 0 2px; letter-spacing:-.01em; }
+  .sub { color:var(--muted); font-size:13px; }
+  main { padding:16px 24px 48px; }
+
+  .accounts { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:10px; margin:16px 0; }
+  .acct { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:11px 13px; box-shadow:var(--shadow); }
+  .acct h3 { margin:0 0 3px; font-size:13px; display:flex; align-items:center; gap:7px; }
+  .acct .email { color:var(--muted); font-size:12px; word-break:break-all; }
+  .acct .meta { margin-top:6px; font-size:11.5px; color:var(--muted); }
+  .dot { width:8px; height:8px; border-radius:50%; flex:none; }
+
+  .notice { background:var(--warn-bg); border:1px solid var(--warn-line); color:var(--warn-ink);
+    border-radius:8px; padding:11px 13px; margin:12px 0; font-size:13px; }
+  .notice b { font-weight:600; }
+
+  .controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:14px 0 10px; }
+  input[type=search], select { background:var(--panel); color:var(--ink); border:1px solid var(--line);
+    border-radius:7px; padding:7px 10px; font:inherit; font-size:13px; }
+  input[type=search] { flex:1; min-width:200px; }
+  button { background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:7px;
+    padding:7px 12px; font:inherit; font-size:13px; cursor:pointer; }
+  button:hover { border-color:var(--muted); }
+  button.primary { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:500; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+
+  .count { color:var(--muted); font-size:12.5px; margin-left:auto; }
+
+  .wrap { overflow-x:auto; background:var(--panel); border:1px solid var(--line); border-radius:8px; box-shadow:var(--shadow); }
+  table { border-collapse:collapse; width:100%; min-width:940px; }
+  th, td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); font-weight:600;
+    position:sticky; top:0; background:var(--panel); cursor:pointer; white-space:nowrap; }
+  tbody tr:hover { background:var(--chip); }
+  tbody tr:last-child td { border-bottom:none; }
+  .title { font-weight:500; }
+  .prompt { color:var(--muted); font-size:12px; margin-top:2px; max-width:420px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .path { font-family:ui-monospace,Consolas,monospace; font-size:11.5px; color:var(--muted);
+    max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .id { font-family:ui-monospace,Consolas,monospace; font-size:11px; color:var(--muted); }
+  .nowrap { white-space:nowrap; }
+
+  .chip { display:inline-block; padding:1px 7px; border-radius:999px; font-size:11px;
+    background:var(--chip); color:var(--muted); border:1px solid var(--line); }
+  .chip.live { background:var(--ok); color:#fff; border-color:transparent; }
+  .chip.arch { opacity:.75; }
+  .chip.pro { background:var(--warn-bg); color:var(--warn-ink); border-color:var(--warn-line); }
+
+  dialog { border:1px solid var(--line); border-radius:10px; background:var(--panel); color:var(--ink);
+    padding:0; max-width:520px; width:calc(100% - 32px); box-shadow:0 8px 32px rgba(0,0,0,.22); }
+  dialog::backdrop { background:rgba(0,0,0,.42); }
+  .dlg { padding:18px 20px; }
+  .dlg h2 { margin:0 0 10px; font-size:16px; }
+  .dlg .row { margin:10px 0; }
+  .dlg label { display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .dlg .actions { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
+  .err { color:var(--danger); font-size:13px; margin-top:10px; white-space:pre-wrap; }
+  .okmsg { color:var(--ok); font-size:13px; margin-top:10px; }
+  code { background:var(--chip); padding:1px 5px; border-radius:4px;
+    font-family:ui-monospace,Consolas,monospace; font-size:12px; word-break:break-all; }
+  .empty { padding:40px; text-align:center; color:var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Claude Session Manager</h1>
+  <div class="sub">Local sessions across every Claude config directory on this machine.</div>
+</header>
+
+<main>
+  <div class="accounts" id="accounts"></div>
+  <div id="notices"></div>
+
+  <div class="controls">
+    <input type="search" id="q" placeholder="Search title, prompt, folder, branch, or session id…" />
+    <select id="fAccount"><option value="">All subscriptions</option></select>
+    <select id="fArchived">
+      <option value="active">Active only</option>
+      <option value="archived">Archived only</option>
+      <option value="">All states</option>
+    </select>
+    <select id="fRunning">
+      <option value="">Running &amp; idle</option>
+      <option value="running">Running only</option>
+      <option value="idle">Idle only</option>
+    </select>
+    <button id="refresh">Refresh</button>
+    <button id="quit" title="Stop the local server and free its memory">Quit server</button>
+    <span class="count" id="count"></span>
+  </div>
+
+  <div class="wrap">
+    <table>
+      <thead><tr>
+        <th data-sort="label">Session</th>
+        <th data-sort="config">Config</th>
+        <th data-sort="state">State</th>
+        <th data-sort="cwd">Folder</th>
+        <th data-sort="branch">Branch</th>
+        <th data-sort="lastActivityAt">Last activity</th>
+        <th data-sort="sizeBytes">Size</th>
+        <th></th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="empty" hidden>No sessions match these filters.</div>
+  </div>
+</main>
+
+<dialog id="ren"><div class="dlg">
+  <h2>Rename session</h2>
+  <div id="renBody"></div>
+  <div class="row">
+    <label for="renInput">Display name</label>
+    <input id="renInput" type="text" maxlength="200" style="width:100%;background:var(--panel);color:var(--ink);
+      border:1px solid var(--line);border-radius:7px;padding:7px 10px;font:inherit;font-size:13px" />
+  </div>
+  <div id="renMsg"></div>
+  <div class="actions">
+    <button id="renCancel">Cancel</button>
+    <button id="renGo" class="primary">Save</button>
+  </div>
+</div></dialog>
+
+<dialog id="dlg"><div class="dlg">
+  <h2>Move session</h2>
+  <div id="dlgBody"></div>
+  <div class="row">
+    <label for="dlgTo">Destination config dir</label>
+    <select id="dlgTo"></select>
+  </div>
+  <div class="row">
+    <label for="dlgMode">Operation</label>
+    <select id="dlgMode">
+      <option value="copy">Copy — leave the original in place</option>
+      <option value="move">Move — remove the original after verifying the copy</option>
+    </select>
+  </div>
+  <div id="dlgWarn"></div>
+  <div id="dlgMsg"></div>
+  <div class="actions">
+    <button id="dlgCancel">Cancel</button>
+    <button id="dlgGo" class="primary">Transfer</button>
+  </div>
+</div></dialog>
+
+<script>
+const $ = (s) => document.querySelector(s);
+let DATA = { accounts:{}, sessions:[] };
+let sortKey = 'lastActivityAt', sortDir = -1, current = null;
+
+const fmtBytes = (n) => n > 1048576 ? (n/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(n/1024))+' KB';
+function fmtWhen(iso) {
+  const d = new Date(iso), h = (Date.now()-d)/36e5;
+  if (h < 1) return Math.max(1,Math.round(h*60))+'m ago';
+  if (h < 24) return Math.round(h)+'h ago';
+  if (h < 24*7) return Math.round(h/24)+'d ago';
+  return d.toLocaleDateString();
+}
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function load(refresh) {
+  const r = await fetch('/api/sessions' + (refresh ? '?refresh=1' : ''));
+  DATA = await r.json();
+  renderAccounts(); renderNotices(); fillSelects(); render();
+}
+
+// One card per SUBSCRIPTION, not per config dir — several config dirs can be
+// the same paying account, which is the thing that actually matters here.
+function renderAccounts() {
+  const colors = ['#c15f3c','#3c6fc1','#5f9e4a','#8a5fc1'];
+  $('#accounts').innerHTML = (DATA.subscriptions||[]).map((s, i) => {
+    const pro = s.subscriptionType && s.subscriptionType !== 'max';
+    const dirs = s.configDirs.length > 1
+      ? `<div class="meta">config dirs: ${s.configDirs.map(esc).join(', ')} — one subscription</div>` : '';
+    return `<div class="acct">
+      <h3><span class="dot" style="background:${colors[i%colors.length]}"></span>${esc(s.displayName||s.email||'?')}
+        <span class="chip ${pro?'pro':''}">${esc(s.subscriptionType||'?')}</span></h3>
+      <div class="email">${esc(s.email||'not signed in')}</div>
+      <div class="meta">${s.sessionCount} session${s.sessionCount===1?'':'s'} · ${esc(s.rateLimitTier||'—')}</div>
+      ${dirs}
+    </div>`;
+  }).join('');
+}
+
+function renderNotices() {
+  const out = [];
+  const subs = DATA.subscriptions || [];
+  const tiers = [...new Set(subs.map(s => s.subscriptionType).filter(Boolean))];
+  if (tiers.length > 1) {
+    const list = subs.filter(s=>s.subscriptionType)
+      .map(s => `${s.displayName||s.email} = ${s.subscriptionType}`).join(', ');
+    out.push(`<div class="notice"><b>These subscriptions are not the same tier.</b> ${esc(list)}.
+      Moving a session to a lower tier can change model availability and rate limits mid-conversation.</div>`);
+  }
+  if (DATA.desktopAppRunning) {
+    out.push(`<div class="notice"><b>Claude Desktop is running.</b> Renaming updates the transcript — which is what
+      <code>claude --resume</code> and this app read — but the desktop app caches session names in memory and will not
+      pick up the change. Quit it and rename again to update the name it displays.</div>`);
+  }
+  $('#notices').innerHTML = out.join('');
+}
+
+function fillSelects() {
+  const cur = $('#fAccount').value;
+  $('#fAccount').innerHTML = '<option value="">All subscriptions</option>' +
+    (DATA.subscriptions||[]).map(s => `<option value="${esc(s.id)}">${esc(s.label)}</option>`).join('');
+  $('#fAccount').value = cur;
+}
+
+function filtered() {
+  const q = $('#q').value.trim().toLowerCase();
+  const fa = $('#fAccount').value, fs_ = $('#fArchived').value, fr = $('#fRunning').value;
+  return DATA.sessions.filter(s => {
+    if (fa && s.subscription !== fa) return false;
+    if (fs_ === 'archived' && s.isArchived !== true) return false;
+    if (fs_ === 'active' && s.isArchived === true) return false;
+    if (fr === 'running' && !s.isRunning) return false;
+    if (fr === 'idle' && s.isRunning) return false;
+    if (q) {
+      const hay = [s.label, s.title, s.lastPrompt, s.cwd, s.branch, s.cliSessionId].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  }).sort((a,b) => {
+    let x = a[sortKey], y = b[sortKey];
+    if (sortKey === 'state') { x = a.isRunning?2:(a.isArchived?0:1); y = b.isRunning?2:(b.isArchived?0:1); }
+    if (x == null) return 1; if (y == null) return -1;
+    return (x < y ? -1 : x > y ? 1 : 0) * sortDir;
+  });
+}
+
+function render() {
+  const rows = filtered();
+  $('#count').textContent = `${rows.length} of ${DATA.sessions.length} · scan ${DATA.scanMs ?? '?'}ms`;
+  $('#empty').hidden = rows.length > 0;
+  $('#rows').innerHTML = rows.map(s => {
+    const state = s.isRunning ? '<span class="chip live">running</span>'
+      : s.isArchived === true ? '<span class="chip arch">archived</span>'
+      : s.isArchived === false ? '<span class="chip">active</span>'
+      : '<span class="chip" title="No desktop-app record for this transcript">unknown</span>';
+    return `<tr>
+      <td><div class="title">${esc(s.label)}</div>
+        ${s.lastPrompt ? `<div class="prompt">${esc(s.lastPrompt)}</div>` : ''}
+        <div class="id">${esc(s.cliSessionId)}</div></td>
+      <td class="nowrap"><span class="chip">${esc(s.config)}</span></td>
+      <td class="nowrap">${state}</td>
+      <td><div class="path" title="${esc(s.cwd||'')}">${esc(s.cwd||'—')}</div></td>
+      <td><div class="path">${esc(s.branch||'—')}</div></td>
+      <td class="nowrap">${fmtWhen(s.lastActivityAt)}</td>
+      <td class="nowrap">${fmtBytes(s.sizeBytes)}</td>
+      <td class="nowrap">
+        <button class="ren" data-id="${esc(s.cliSessionId)}" data-cfg="${esc(s.config)}">Rename…</button>
+        <button class="mv" data-id="${esc(s.cliSessionId)}" data-cfg="${esc(s.config)}"
+          ${s.isRunning?'disabled title="Close this session first"':''}>Move…</button></td>
+    </tr>`;
+  }).join('');
+  document.querySelectorAll('#rows button.mv').forEach(b =>
+    b.onclick = () => openDlg(b.dataset.id, b.dataset.cfg));
+  document.querySelectorAll('#rows button.ren').forEach(b =>
+    b.onclick = () => openRename(b.dataset.id, b.dataset.cfg));
+}
+
+function openRename(id, cfg) {
+  current = DATA.sessions.find(s => s.cliSessionId === id && s.config === cfg);
+  if (!current) return;
+  $('#renBody').innerHTML = `<div class="id">${esc(id)}</div>
+    <div class="prompt" style="white-space:normal;max-width:none">${esc(current.cwd||'')}</div>`;
+  $('#renInput').value = current.title || '';
+  $('#renMsg').innerHTML = '';
+  $('#renGo').disabled = false;
+  $('#ren').showModal();
+  setTimeout(() => { $('#renInput').focus(); $('#renInput').select(); }, 30);
+}
+
+function openDlg(id, cfg) {
+  current = DATA.sessions.find(s => s.cliSessionId === id && s.config === cfg);
+  if (!current) return;
+  $('#dlgBody').innerHTML = `<div><b>${esc(current.label)}</b></div>
+    <div class="prompt" style="white-space:normal;max-width:none">${esc(current.cwd||'')}</div>
+    <div class="id" style="margin-top:6px">${esc(id)} · currently in <b>${esc(cfg)}</b></div>`;
+  // Destinations are subscriptions, not config dirs; the write lands in that
+  // subscription's primary config dir.
+  $('#dlgTo').innerHTML = (DATA.subscriptions||[]).filter(s => s.id !== current.subscription)
+    .map(s => `<option value="${esc(s.id)}">${esc(s.label)} → ${esc(s.primaryConfig)}</option>`).join('');
+  $('#dlgMsg').innerHTML = ''; $('#dlgGo').disabled = false; $('#dlgMode').value = 'copy';
+  updateWarn();
+  $('#dlg').showModal();
+}
+
+function updateWarn() {
+  const subs = DATA.subscriptions || [];
+  const to = subs.find(s => s.id === $('#dlgTo').value);
+  const from = subs.find(s => s.id === current?.subscription);
+  const w = [];
+  if (to && from && to.subscriptionType !== from.subscriptionType)
+    w.push(`Tier change: ${from.subscriptionType} → ${to.subscriptionType}. Model access and rate limits may differ.`);
+  if (to) w.push(`Lands in config dir "${to.primaryConfig}" — resume it from there.`);
+  if ($('#dlgMode').value === 'copy')
+    w.push('After copying, the two transcripts diverge independently — continue only one.');
+  $('#dlgWarn').innerHTML = w.length ? `<div class="notice">${w.map(esc).join('<br>')}</div>` : '';
+}
+
+$('#renCancel').onclick = () => $('#ren').close();
+$('#renInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('#renGo').click(); } });
+$('#renGo').onclick = async () => {
+  $('#renGo').disabled = true; $('#renMsg').innerHTML = '';
+  try {
+    const r = await fetch('/api/rename', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ cliSessionId: current.cliSessionId, config: current.config, title: $('#renInput').value })
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'Rename failed');
+    let note = j.desktopUpdated
+      ? 'Desktop app registry updated too.'
+      : (j.desktopSkippedReason || '');
+    $('#renMsg').innerHTML = `<div class="okmsg">Renamed.</div>${note?`<div class="notice">${esc(note)}</div>`:''}`;
+    await load(true);
+  } catch (e) {
+    $('#renMsg').innerHTML = `<div class="err">${esc(e.message)}</div>`;
+    $('#renGo').disabled = false;
+  }
+};
+
+$('#dlgTo').onchange = updateWarn;
+$('#dlgMode').onchange = updateWarn;
+$('#dlgCancel').onclick = () => $('#dlg').close();
+
+$('#dlgGo').onclick = async () => {
+  $('#dlgGo').disabled = true; $('#dlgMsg').innerHTML = '';
+  try {
+    const r = await fetch('/api/transfer', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ cliSessionId: current.cliSessionId, from: current.config,
+                             to: (DATA.subscriptions.find(s => s.id === $('#dlgTo').value)||{}).primaryConfig,
+                             mode: $('#dlgMode').value })
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'Transfer failed');
+    $('#dlgMsg').innerHTML = `<div class="okmsg">${esc(j.mode === 'move' ? 'Moved' : 'Copied')} to <b>${esc(j.to)}</b>.
+      Resume with:</div><div style="margin-top:6px"><code>${esc(j.resumeCommand)}</code></div>`;
+    await load(true);
+  } catch (e) {
+    $('#dlgMsg').innerHTML = `<div class="err">${esc(e.message)}</div>`;
+    $('#dlgGo').disabled = false;
+  }
+};
+
+document.querySelectorAll('th[data-sort]').forEach(th => th.onclick = () => {
+  const k = th.dataset.sort;
+  if (k === sortKey) sortDir = -sortDir; else { sortKey = k; sortDir = (k === 'label' || k === 'cwd') ? 1 : -1; }
+  render();
+});
+['#q','#fAccount','#fArchived','#fRunning'].forEach(s => {
+  $(s).addEventListener('input', render); $(s).addEventListener('change', render);
+});
+$('#refresh').onclick = () => load(true);
+
+// --- Server lifetime -------------------------------------------------------
+// The server exits once the heartbeat stops, so an open tab is what keeps it
+// alive. Pinging only while visible means a backgrounded tab you forgot about
+// still lets it wind down.
+let idleMinutes = 5;
+async function ping() {
+  if (document.hidden) return;
+  try {
+    const r = await fetch('/api/ping');
+    const j = await r.json();
+    idleMinutes = j.idleMinutes;
+    setStopped(false);
+  } catch { setStopped(true); }
+}
+setInterval(ping, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) ping(); });
+
+// Closing the tab arms a short grace window server-side rather than an instant
+// kill, so a plain reload does not take the server down with it.
+addEventListener('pagehide', () => { navigator.sendBeacon && navigator.sendBeacon('/api/bye'); });
+
+function setStopped(stopped) {
+  document.body.style.opacity = stopped ? '.55' : '';
+  const b = $('#quit');
+  b.textContent = stopped ? 'Server stopped' : 'Quit server';
+  b.disabled = stopped;
+  if (stopped) {
+    $('#count').textContent = 'Server stopped — relaunch from the Claude Sessions shortcut.';
+    document.querySelectorAll('#rows button').forEach(x => x.disabled = true);
+  }
+}
+
+$('#quit').onclick = async () => {
+  if (!confirm('Stop the local server? The page will stop working until you relaunch it.')) return;
+  try { await fetch('/api/shutdown', { method: 'POST' }); } catch {}
+  setTimeout(() => setStopped(true), 300);
+};
+
+load(false).then(ping);
+</script>
+</body>
+</html>
