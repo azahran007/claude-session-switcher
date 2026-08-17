@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Claude Session Manager</title>
+<title>Claude Session Switcher</title>
 <style>
   :root {
     --bg:#f7f7f5; --panel:#fff; --ink:#1a1a18; --muted:#6b6b66; --line:#e3e3de;
@@ -86,7 +86,7 @@
 </head>
 <body>
 <header>
-  <h1>Claude Session Manager</h1>
+  <h1>Claude Session Switcher</h1>
   <div class="sub">Local sessions across every Claude config directory on this machine.</div>
 </header>
 
@@ -116,7 +116,7 @@
     <table>
       <thead><tr>
         <th data-sort="label">Session</th>
-        <th data-sort="config">Config</th>
+        <th data-sort="subscription">Subscription</th>
         <th data-sort="state">State</th>
         <th data-sort="cwd">Folder</th>
         <th data-sort="branch">Branch</th>
@@ -149,8 +149,9 @@
   <h2>Move session</h2>
   <div id="dlgBody"></div>
   <div class="row">
-    <label for="dlgTo">Destination config dir</label>
+    <label for="dlgTo">Move to subscription</label>
     <select id="dlgTo"></select>
+    <div id="dlgOnly"></div>
   </div>
   <div class="row">
     <label for="dlgMode">Operation</label>
@@ -181,6 +182,9 @@ function fmtWhen(iso) {
   return d.toLocaleDateString();
 }
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const subOf = (id) => (DATA.subscriptions||[]).find(s => s.id === id);
+const subShort = (id) => { const s = subOf(id); return s ? (s.displayName || s.email || id.slice(0,8)) : '?'; };
+const subLabel = (id) => { const s = subOf(id); return s ? s.label : '(unknown)'; };
 
 async function load(refresh) {
   const r = await fetch('/api/sessions' + (refresh ? '?refresh=1' : ''));
@@ -241,13 +245,15 @@ function filtered() {
     if (fr === 'running' && !s.isRunning) return false;
     if (fr === 'idle' && s.isRunning) return false;
     if (q) {
-      const hay = [s.label, s.title, s.lastPrompt, s.cwd, s.branch, s.cliSessionId].join(' ').toLowerCase();
+      const hay = [s.label, s.title, s.lastPrompt, s.cwd, s.branch, s.cliSessionId,
+                   s.config, subLabel(s.subscription)].join(' ').toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
   }).sort((a,b) => {
     let x = a[sortKey], y = b[sortKey];
     if (sortKey === 'state') { x = a.isRunning?2:(a.isArchived?0:1); y = b.isRunning?2:(b.isArchived?0:1); }
+    if (sortKey === 'subscription') { x = subShort(a.subscription); y = subShort(b.subscription); }
     if (x == null) return 1; if (y == null) return -1;
     return (x < y ? -1 : x > y ? 1 : 0) * sortDir;
   });
@@ -266,7 +272,8 @@ function render() {
       <td><div class="title">${esc(s.label)}</div>
         ${s.lastPrompt ? `<div class="prompt">${esc(s.lastPrompt)}</div>` : ''}
         <div class="id">${esc(s.cliSessionId)}</div></td>
-      <td class="nowrap"><span class="chip">${esc(s.config)}</span></td>
+      <td class="nowrap"><span class="chip">${esc(subShort(s.subscription))}</span>
+        <div class="id">${esc(s.config)}</div></td>
       <td class="nowrap">${state}</td>
       <td><div class="path" title="${esc(s.cwd||'')}">${esc(s.cwd||'—')}</div></td>
       <td><div class="path">${esc(s.branch||'—')}</div></td>
@@ -301,11 +308,22 @@ function openDlg(id, cfg) {
   if (!current) return;
   $('#dlgBody').innerHTML = `<div><b>${esc(current.label)}</b></div>
     <div class="prompt" style="white-space:normal;max-width:none">${esc(current.cwd||'')}</div>
-    <div class="id" style="margin-top:6px">${esc(id)} · currently in <b>${esc(cfg)}</b></div>`;
+    <div class="id" style="margin-top:6px">${esc(id)}</div>
+    <div class="row" style="margin-bottom:0">
+      <label>Currently in</label>
+      <div><span class="chip">${esc(subLabel(current.subscription))}</span>
+        <span class="id">config dir: ${esc(cfg)}</span></div>
+    </div>`;
   // Destinations are subscriptions, not config dirs; the write lands in that
-  // subscription's primary config dir.
-  $('#dlgTo').innerHTML = (DATA.subscriptions||[]).filter(s => s.id !== current.subscription)
+  // subscription's primary config dir. The session's own subscription is excluded
+  // — there is nowhere to move it to within the account it already lives in.
+  const dests = (DATA.subscriptions||[]).filter(s => s.id !== current.subscription);
+  $('#dlgTo').innerHTML = dests
     .map(s => `<option value="${esc(s.id)}">${esc(s.label)} → ${esc(s.primaryConfig)}</option>`).join('');
+  $('#dlgOnly').innerHTML = dests.length === 1
+    ? `<div class="id" style="margin-top:4px">Only one destination: this machine has
+       ${(DATA.subscriptions||[]).length} subscriptions and the session already lives in the other one.</div>`
+    : '';
   $('#dlgMsg').innerHTML = ''; $('#dlgGo').disabled = false; $('#dlgMode').value = 'copy';
   updateWarn();
   $('#dlg').showModal();
