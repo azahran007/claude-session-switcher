@@ -132,7 +132,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`\n  Claude Session Manager`);
+  console.log(`\n  Claude Session Switcher`);
   console.log(`  http://${HOST}:${PORT}`);
   console.log(IDLE_MS > 0 ? `  Auto-stops after ${IDLE_MS / 60000} min idle.\n` : `  Idle shutdown disabled.\n`);
 });
