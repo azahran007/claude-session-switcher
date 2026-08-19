@@ -110,6 +110,13 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, result);
     }
 
+    if (url.pathname === '/api/activate' && req.method === 'POST') {
+      const body = await readBody(req);
+      const result = require('./lib/activate').activate(body);
+      cache = null;
+      return json(res, 200, result);
+    }
+
     if (url.pathname === '/api/transfer' && req.method === 'POST') {
       const body = await readBody(req);
       const result = transfer(body);

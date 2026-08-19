@@ -130,6 +130,31 @@ Transfers refuse to run when:
 `move` is copy → verify byte length → unlink. The source is never removed before
 the destination is confirmed intact.
 
+## Activating a moved session in the desktop app
+
+Moving a transcript is enough for `claude --resume`, which reads the `.jsonl`
+directly. The desktop app is different: it lists sessions from its **own**
+registry, and only under the account it is signed into. A session moved between
+config dirs keeps its transcript but leaves its registry record behind in the old
+account — so it resumes fine from the CLI while staying invisible in the app.
+
+Sessions in that state are flagged **not in app** and get an **Activate** button,
+which writes the missing record into the destination account's registry
+directory. The record is cloned from a real one in that same directory, so the
+schema stays whatever the installed app version expects instead of a guess that
+goes stale on the next update; only identity and per-session fields
+(`sessionId`, `cliSessionId`, title, cwd, branch, timestamps) are overwritten,
+and inherited state like `prs` and `bridgeSessionIds` is cleared.
+
+**Claude Desktop must be restarted afterwards.** It reads its registry at startup
+and caches the list in memory, so a newly written record is invisible until it
+restarts — the same caching that makes a rename invisible while it runs.
+
+Note the two identities involved are independent: the account a *config dir* is
+signed into (`<configDir>/.claude.json`) and the account the *desktop app* is
+signed into (`%APPDATA%/Claude/config.json` → `lastKnownAccountUuid`). Activation
+writes under the config dir's account, which is where that session now belongs.
+
 ## Renaming
 
 Claude Code stores the display name as a `custom-title` record appended to the

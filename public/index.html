@@ -268,18 +268,25 @@ function render() {
       : s.isArchived === true ? '<span class="chip arch">archived</span>'
       : s.isArchived === false ? '<span class="chip">active</span>'
       : '<span class="chip" title="No desktop-app record for this transcript">unknown</span>';
+    // Present and resumable by the CLI, but this account's desktop app has no
+    // record of it — the state after a move, until it is activated.
+    const notInApp = s.desktopVisible === false
+      ? '<div class="id" title="Resumable by the CLI, but Claude Desktop has no record of it in this account">not in app</div>'
+      : '';
     return `<tr>
       <td><div class="title">${esc(s.label)}</div>
         ${s.lastPrompt ? `<div class="prompt">${esc(s.lastPrompt)}</div>` : ''}
         <div class="id">${esc(s.cliSessionId)}</div></td>
       <td class="nowrap"><span class="chip">${esc(subShort(s.subscription))}</span>
         <div class="id">${esc(s.config)}</div></td>
-      <td class="nowrap">${state}</td>
+      <td class="nowrap">${state}${notInApp}</td>
       <td><div class="path" title="${esc(s.cwd||'')}">${esc(s.cwd||'—')}</div></td>
       <td><div class="path">${esc(s.branch||'—')}</div></td>
       <td class="nowrap">${fmtWhen(s.lastActivityAt)}</td>
       <td class="nowrap">${fmtBytes(s.sizeBytes)}</td>
       <td class="nowrap">
+        ${s.desktopVisible === false ? `<button class="act" data-id="${esc(s.cliSessionId)}" data-cfg="${esc(s.config)}"
+          title="Register this session in its account so Claude Desktop lists it">Activate</button>` : ''}
         <button class="ren" data-id="${esc(s.cliSessionId)}" data-cfg="${esc(s.config)}">Rename…</button>
         <button class="mv" data-id="${esc(s.cliSessionId)}" data-cfg="${esc(s.config)}"
           ${s.isRunning?'disabled title="Close this session first"':''}>Move…</button></td>
@@ -289,6 +296,33 @@ function render() {
     b.onclick = () => openDlg(b.dataset.id, b.dataset.cfg));
   document.querySelectorAll('#rows button.ren').forEach(b =>
     b.onclick = () => openRename(b.dataset.id, b.dataset.cfg));
+  document.querySelectorAll('#rows button.act').forEach(b =>
+    b.onclick = () => activateSession(b.dataset.id, b.dataset.cfg, b));
+}
+
+// Writes the missing desktop-registry record so the app will list this session.
+// The app only reads its registry at startup, so it needs a restart afterwards.
+async function activateSession(id, cfg, btn) {
+  const sub = subLabel(DATA.sessions.find(x => x.cliSessionId === id && x.config === cfg)?.subscription);
+  const msg = 'Register this session with ' + sub + ' so Claude Desktop lists it?'
+            + String.fromCharCode(10,10)
+            + 'Claude Desktop must be restarted before it appears.';
+  if (!confirm(msg)) return;
+  btn.disabled = true; btn.textContent = 'Activating…';
+  try {
+    const r = await fetch('/api/activate', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ cliSessionId: id, config: cfg })
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'Activation failed');
+    alert(j.alreadyActive ? j.message
+      : 'Registered with ' + sub + '.' + String.fromCharCode(10,10) + j.message);
+    await load(true);
+  } catch (e) {
+    alert('Activation failed: ' + e.message);
+    btn.disabled = false; btn.textContent = 'Activate';
+  }
 }
 
 function openRename(id, cfg) {
